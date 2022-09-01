@@ -3,12 +3,13 @@ from pickle import FALSE
 from threading import Thread
 from unicodedata import name
 import slixmpp
-import xmpp
+import logging
 import json
 from slixmpp.xmlstream import ET
 from slixmpp.exceptions import IqError, IqTimeout
 from flooding import *
 from aioconsole import *
+from lsr import *
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -90,22 +91,36 @@ class XMPPChat(slixmpp.ClientXMPP):
                 destiny = flooding(nodeToSend, self.totalNodes, self.G)
             elif (self.algorithmToUse == "2"):
 
-                G = [] # adjacency matrix
-                userDestiny = await ainput("Type email to send message: ")
-                message = await ainput("Message: ")
-                protocolMessage = ""
+                if (self.firstTimeFilling):
+                    self.firstTimeFilling = False
+                    G = [] # adjacency matrix
+                    namesNodes = []
 
-                with open("topologia.txt") as f:
-                    json_data = json.load(f)
-                    sizeMatrix = len(json_data['config'])
+                    with open("topologia.txt") as f:
+                        json_data = json.load(f)
+                        sizeMatrix = len(json_data['config'])
 
-                    for i in json_data['config']:
-                        lst = [999] * sizeMatrix
-                        for neighbor in json_data['config'][i]:
-                            lst[dicLetters[neighbor]] = 1
-                        G.append(lst)
+                        for i in json_data['config']:
+                            lst = [999] * sizeMatrix
+                            namesNodes.append(i)
+                            for neighbor in json_data['config'][i]:
+                                lst[dicLetters[neighbor]] = 1
 
-                # destiny = lsrAlgorithm(self.user, userDestiny, sizeMatrix, G)
+                            G.append(lst)
+                    
+                    nodes = namesNodes[1:]
+                        
+                    for i in range(len(nodes)):
+                        email = await ainput("For the node %s please enter a valid email " % (nodes[i]))
+                        self.listNodes[nodes[i]] = email
+
+                nodeToSend = list(self.listNodes.keys())[list(self.listNodes.values()).index(userDestiny)]
+                numberNode = dicLetters[nodeToSend]
+                destiny = lsrAlgorithm(0, numberNode, sizeMatrix, G)
+                
+                for i in range(len(destiny)):
+                    destiny[i] = list(dicLetters.keys())[list(dicLetters.values()).index(destiny[i])]
+
             elif (self.algorithmToUse == "3"):
                 destiny = flooding()
             else:
@@ -114,8 +129,16 @@ class XMPPChat(slixmpp.ClientXMPP):
 
             jumps = "0"
             distance = str(len(destiny))
-            firstNodeEmail = list(self.listNodes.values())[0]
-            listNodes = str(self.listNodes)
+
+            # Creating the object to follow with only nodes with emails
+            nodesToFollow = {}
+            for i in destiny:
+                if i in self.listNodes:
+                    nodesToFollow[i] = self.listNodes[i]
+            
+            firstNodeEmail = list(nodesToFollow.values())[0]
+
+            listNodes = str(nodesToFollow)
 
             protocolMessage = self.user + ';' + userDestiny + ';' + jumps + ';' + distance + ';' + listNodes + ';' + message
 
@@ -141,6 +164,8 @@ algorithmToUse = input("Please type algorithm to use: ")
 # email = "alvarez@alumchat.fun"
 # password = "swais"
 
+# FOR DEBUG REMOVE COMMENT
+# logging.basicConfig(level=logging.DEBUG, format='%(levelname)-8s %(message)s')
 chat = XMPPChat(email, password, algorithmToUse) 
 chat.register_plugin('xep_0030') # Service Discovery
 chat.register_plugin('xep_0199') # XMPP Ping
