@@ -1,8 +1,1 @@
-{"type":"topo", 
-"config":
-{"A": "",
-"B": "jojo@alumchat.fun", 
-"C": "alvarez@alumchat.fun", 
-"D": "diego@alumchat.fun", 
-"E": "coco@alumchat.fun", 
-"F": "pad19200@alumchat.fun" }
+{"type":"topo", "config":{"A":"pad19200@alumchat.fun","B":"n@alumchat.fun","C":"m@alumchat.fun","D":"l@alumchat.fun"}}

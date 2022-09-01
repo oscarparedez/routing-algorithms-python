@@ -3,12 +3,13 @@ from pickle import FALSE
 from threading import Thread
 from unicodedata import name
 import slixmpp
-import logging
+import xmpp
 import json
 from slixmpp.xmlstream import ET
 from slixmpp.exceptions import IqError, IqTimeout
 from flooding import *
 from aioconsole import *
+import logging
 from lsr import *
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -37,10 +38,26 @@ class XMPPChat(slixmpp.ClientXMPP):
         params = message.split(';')
 
         # If we are the destiny we print message
-        if (self.user == params[1]):
+        if self.algorithmToUse != "1":
+            if (self.user == params[1]):
+                message_from = event['from']
+                await aprint("%s says: %s" % (message_from, params[5]))
+            else:
+                jumps = str(int(params[2]) + 1)
+                params[2] = jumps
+
+                listNodes = json.loads(params[4].replace("'", "\""))
+
+                nextNode = list(listNodes.values())[int(jumps)]
+
+                newMessage = ';'.join(params)
+
+                self.send_message(mto=nextNode, mbody=newMessage, mtype='chat')
+                await asyncio.sleep(0.5)
+        else:
             message_from = event['from']
             await aprint("%s says: %s" % (message_from, params[5]))
-        else:
+
             jumps = str(int(params[2]) + 1)
             params[2] = jumps
 
@@ -62,33 +79,40 @@ class XMPPChat(slixmpp.ClientXMPP):
         await aprint("1. Send Private Message \n2. Log Out")
         option = await ainput("")
         if option == "1":
-            userDestiny = await ainput("Type email to send message: ")
+
+            if self.algorithmToUse == '2' or self.algorithmToUse == '3':
+                userDestiny = await ainput("Type email to send message: ")
+            else:
+                userDestiny = 'all'
+            
             message = await ainput("Message: ")
             protocolMessage = ""
 
             if (self.algorithmToUse == "1"):
-                # Filling email values of nodes just one time
-                if (self.firstTimeFilling):
-                    self.firstTimeFilling = False
-                    namesNodes = []
-                    
-                    with open("topologia.txt") as f:
-                        json_data = json.load(f)
+                namesNodes = []
+                nodeSender = ''
 
-                        for i in json_data['config']:
-                            self.totalNodes+=1
-                            head = i
-                            namesNodes.append(head)
-                            for neighbor in json_data['config'][i]:
-                                self.G.add_edge(head, neighbor, weight = 1)
+                # Fill graph
+                with open("topologia.txt") as f:
+                    json_data = json.load(f)
 
-                    nodes = namesNodes[1:]
-                    
-                    for i in range(len(nodes)):
-                        email = await ainput("For the node %s please enter a valid email " % (nodes[i]))
-                        self.listNodes[nodes[i]] = email
-                nodeToSend = list(self.listNodes.keys())[list(self.listNodes.values()).index(userDestiny)]
-                destiny = flooding(nodeToSend, self.totalNodes, self.G)
+                    print('111')
+                    for i in json_data['config']:
+                        print('111')
+                        for neighbor in json_data['config'][i]:
+                            self.G.add_edge(i, neighbor, weight = 1)
+                
+                #Generate dictionary of Nodes as keys and Emails as values
+                with open("users.txt") as f:
+                    json_data = json.load(f)
+                    for i in json_data['config']:
+                        self.totalNodes+=1
+                        self.listNodes[i] = json_data['config'][i]
+                
+                for key, val in self.listNodes.items():
+                    if val == self.user:
+                        nodeSender = key
+                destiny = flooding(nodeSender, self.totalNodes, self.G)
             elif (self.algorithmToUse == "2"):
 
                 if (self.firstTimeFilling):
@@ -109,10 +133,12 @@ class XMPPChat(slixmpp.ClientXMPP):
                             G.append(lst)
                     
                     nodes = namesNodes[1:]
-                        
-                    for i in range(len(nodes)):
-                        email = await ainput("For the node %s please enter a valid email " % (nodes[i]))
-                        self.listNodes[nodes[i]] = email
+
+                    #Generate dictionary of Nodes as keys and Emails as values
+                    with open("users.txt") as f:
+                        json_data = json.load(f)
+                        for i in json_data['config']:
+                            self.listNodes[i] = json_data['config'][i]
 
                 nodeToSend = list(self.listNodes.keys())[list(self.listNodes.values()).index(userDestiny)]
                 numberNode = dicLetters[nodeToSend]

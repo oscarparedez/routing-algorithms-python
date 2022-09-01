@@ -57,6 +57,7 @@ def lsrAlgorithm(source, destination, sizeMatrix, G):
 
     # If destination is source, then pi[x]= 9000. 
     if(pi[x] == 9000): 
+        print('here')
         print(source)
     else:
         # Find the path from destination to source
