@@ -11,6 +11,7 @@ from flooding import *
 from aioconsole import *
 import logging
 from lsr import *
+from dvr import *
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -38,43 +39,39 @@ class XMPPChat(slixmpp.ClientXMPP):
         params = message.split(';')
 
         # If we are the destiny we print message
-        if self.algorithmToUse != "1":
-            if (self.user == params[1]):
-                message_from = event['from']
-                await aprint("%s says: %s" % (message_from, params[5]))
-            else:
-                jumps = str(int(params[2]) + 1)
-                params[2] = jumps
+        if (self.user == params[1]):
+            await aprint("Llego el mensaje al destinatario", params)
 
-                listNodes = json.loads(params[4].replace("'", "\""))
+        message_from = event['from']
+        # await aprint("%s says: %s" % (message_from, params[5]))
+        await aprint("Mensaje viene de ", params[6])
+        jumps = str(int(params[2]) + 1)
+        params[2] = jumps
+        params[6] = self.user
 
-                nextNode = list(listNodes.values())[int(jumps)]
+        listNodes = json.loads(params[4].replace("'", "\""))
+        params[7] = list(listNodes.keys())[int(jumps)]
+        print(params[7])
 
-                newMessage = ';'.join(params)
+        nextNode = list(listNodes.values())[int(jumps)]
 
-                self.send_message(mto=nextNode, mbody=newMessage, mtype='chat')
-                await asyncio.sleep(0.5)
-        else:
-            message_from = event['from']
-            await aprint("%s says: %s" % (message_from, params[5]))
+        newMessage = ';'.join(params)
 
-            jumps = str(int(params[2]) + 1)
-            params[2] = jumps
-
-            listNodes = json.loads(params[4].replace("'", "\""))
-
-            nextNode = list(listNodes.values())[int(jumps)]
-
-            newMessage = ';'.join(params)
-
-            self.send_message(mto=nextNode, mbody=newMessage, mtype='chat')
-            await asyncio.sleep(0.5)
+        self.send_message(mto=nextNode, mbody=newMessage, mtype='chat')
+        await asyncio.sleep(0.5)
 
     async def start(self, event):
         self.send_presence('chat', 'a')
 
         await aprint("Welcome! ", self.user)
         await self.get_roster()
+
+        #Generate dictionary of Nodes as keys and Emails as values
+        with open("users.txt") as f:
+            json_data = json.load(f)
+            for i in json_data['config']:
+                self.totalNodes+=1
+                self.listNodes[i] = json_data['config'][i]
 
         await aprint("1. Send Private Message \n2. Log Out")
         option = await ainput("")
@@ -95,19 +92,9 @@ class XMPPChat(slixmpp.ClientXMPP):
                 # Fill graph
                 with open("topologia.txt") as f:
                     json_data = json.load(f)
-
-                    print('111')
                     for i in json_data['config']:
-                        print('111')
                         for neighbor in json_data['config'][i]:
                             self.G.add_edge(i, neighbor, weight = 1)
-                
-                #Generate dictionary of Nodes as keys and Emails as values
-                with open("users.txt") as f:
-                    json_data = json.load(f)
-                    for i in json_data['config']:
-                        self.totalNodes+=1
-                        self.listNodes[i] = json_data['config'][i]
                 
                 for key, val in self.listNodes.items():
                     if val == self.user:
@@ -134,12 +121,6 @@ class XMPPChat(slixmpp.ClientXMPP):
                     
                     nodes = namesNodes[1:]
 
-                    #Generate dictionary of Nodes as keys and Emails as values
-                    with open("users.txt") as f:
-                        json_data = json.load(f)
-                        for i in json_data['config']:
-                            self.listNodes[i] = json_data['config'][i]
-
                 nodeToSend = list(self.listNodes.keys())[list(self.listNodes.values()).index(userDestiny)]
                 numberNode = dicLetters[nodeToSend]
                 destiny = lsrAlgorithm(0, numberNode, sizeMatrix, G)
@@ -148,10 +129,31 @@ class XMPPChat(slixmpp.ClientXMPP):
                     destiny[i] = list(dicLetters.keys())[list(dicLetters.values()).index(destiny[i])]
 
             elif (self.algorithmToUse == "3"):
-                destiny = flooding()
+                nodeSender = ''
+
+                # Fill graph
+                with open("topologia.txt") as f:
+                    json_data = json.load(f)
+
+                    print('111')
+                    for i in json_data['config']:
+                        print('111')
+                        for neighbor in json_data['config'][i]:
+                            self.G.add_edge(i, neighbor, weight = 1)
+                
+                for key, val in self.listNodes.items():
+                    if val == self.user:
+                        nodeSender = key
+                
+                nodeToSend = list(self.listNodes.keys())[list(self.listNodes.values()).index(userDestiny)]
+                print("Tabla de ruteo: ")
+                for node in list(self.G.nodes):
+                    if node != nodeSender:
+                        print('Node: ', node, dvr(nodeSender, node, self.G))        
+                destiny = dvr(nodeSender, nodeToSend, self.G)
+                destiny = destiny['path']
             else:
-                # Default algorithm
-                destiny = flooding()
+                exit()
 
             jumps = "0"
             distance = str(len(destiny))
@@ -165,8 +167,8 @@ class XMPPChat(slixmpp.ClientXMPP):
             firstNodeEmail = list(nodesToFollow.values())[0]
 
             listNodes = str(nodesToFollow)
-
-            protocolMessage = self.user + ';' + userDestiny + ';' + jumps + ';' + distance + ';' + listNodes + ';' + message
+            print(self.user, nodesToFollow)
+            protocolMessage = self.user + ';' + userDestiny + ';' + jumps + ';' + distance + ';' + listNodes + ';' + message + ';' + self.user + ';' + destiny[1]
 
             self.send_message(mto=firstNodeEmail, mbody=protocolMessage, mtype='chat')
             await asyncio.sleep(0.5)
@@ -178,7 +180,6 @@ class XMPPChat(slixmpp.ClientXMPP):
         else: 
             await aprint("Try another option!")
             await self.start(event)
-
 
 print("--- Log In ---")
 email = input("Email: ")
